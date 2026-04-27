@@ -1,11 +1,26 @@
 import os
-from dotenv import load_dotenv
 import requests
+from dotenv import load_dotenv
+from agent.analyzer.analyzer import Analyzer
+from agent.planner.planner import Planner
+from agent.executor.executor import Executor
+from infra.deploy_agent import install_docker_on_remote
 
-# Aira's Core Logic Imports (Jo humne pehle banaye thay)
-# Note: In files ka hona zaroori hai aapke folder mein
-from agent_logic import generate_dockerfile
-from deploy_agent import install_docker_on_remote
+load_dotenv()
+
+def call_ai(prompt):
+    r = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "google/gemini-2.0-flash-exp:free",
+            "messages": [{"role": "user", "content": prompt}]
+        }
+    )
+    return r.json()["choices"][0]["message"]["content"]
 
 class AiraAgent:
     def __init__(self):
@@ -13,24 +28,33 @@ class AiraAgent:
         self.api_key = os.getenv("VULTR_API_KEY")
         self.api_url = os.getenv("VULTR_API_URL")
         self.headers = {"Authorization": f"Bearer {self.api_key}"}
+        self.analyzer = Analyzer()
+        self.planner = Planner()
+        self.executor = Executor()
         print("--- AIRA AGENT INITIALIZED ---")
 
-    def run_deployment_pipeline(self):
+    def run_deployment_pipeline(self, project_files: dict):
         print("\nAira is starting the deployment process...")
-        
-        # 1. Analyze & Generate Dockerfile (Noor's Code)
-        generate_dockerfile(app_type="python")
-        
-        # 2. Setup Infrastructure (Saira's Architecture)
-        print("Aira is provisioning the server on Vultr...")
-        # Mock logic to get IP
-        server_ip = "192.168.1.100" 
-        
-        # 3. Install Environment
-        install_docker_on_remote(server_ip, "root", "securepassword123")
-        
-        print("\n--- DEPLOYMENT BY AIRA COMPLETED SUCCESSFULLY ---")
+
+        print("\n🔍 Analyzing code...")
+        analysis = self.analyzer.analyze_project(project_files)
+        print(f"Analysis: {analysis}")
+
+        print("\n📋 Creating plan...")
+        plan = self.planner.create_plan(analysis)
+        print(f"Plan: {plan}")
+
+        print("\n⚙️ Executing plan...")
+        result = self.executor.execute_plan(plan, ".")
+        print(f"Result: {result}")
+
+        print("\n--- DEPLOYMENT BY AIRA COMPLETED ---")
 
 if __name__ == "__main__":
-    aira = AiraAgent()
-    aira.run_deployment_pipeline()
+    agent = AiraAgent()
+
+    with open("core/legacy_app.py", "r") as f:
+        code = f.read()
+
+    project_files = {"legacy_app.py": code}
+    agent.run_deployment_pipeline(project_files)
